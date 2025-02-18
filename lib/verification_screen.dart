@@ -16,18 +16,46 @@ class VerificationScreen extends StatefulWidget {
 class _VerificationScreenState extends State<VerificationScreen> {
   late final WebViewController _controller;
   bool _isLoading = true;
-  bool _isCreatingSession = true;
   String? sessionUrl;
 
   @override
   void initState() {
     super.initState();
-    _setupWebView();
     _createSessionAndLoad();
   }
 
+  /// Authenticates with the Didit API and then creates a verification session.
+  Future<void> _createSessionAndLoad() async {
+    try {
+      await _setupWebView();
+      final String clientAccessToken = await getClientAccessToken();
+
+      const String features = "OCR + FACE";
+      const String callbackUrl = "https://example.com/verification/callback";
+      const String vendorData = "your-vendor-data";
+
+      final sessionData = await createSession(
+        features: features,
+        callback: callbackUrl,
+        vendorData: vendorData,
+        accessToken: clientAccessToken,
+      );
+
+      sessionUrl = sessionData["url"];
+
+      if (sessionUrl != null) {
+        _controller.loadRequest(Uri.parse(sessionUrl!));
+      }
+    } catch (error) {
+      debugPrint("Error creating session: $error");
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
   /// Sets up the WebView controller with necessary platform-specific settings.
-  void _setupWebView() async {
+  Future<void> _setupWebView() async {
     await Permission.camera.request();
     await Permission.microphone.request();
     late final PlatformWebViewControllerCreationParams params;
@@ -95,44 +123,6 @@ class _VerificationScreenState extends State<VerificationScreen> {
         },
       ),
     );
-  }
-
-  /// Authenticates with the Didit API and then creates a verification session.
-  Future<void> _createSessionAndLoad() async {
-    try {
-      setState(() {
-        _isCreatingSession = true;
-      });
-
-      final String clientAccessToken = await getClientAccessToken();
-
-      const String features = "OCR + FACE";
-      const String callbackUrl = "https://example.com/verification/callback";
-      const String vendorData = "your-vendor-data";
-
-      final sessionData = await createSession(
-        features: features,
-        callback: callbackUrl,
-        vendorData: vendorData,
-        accessToken: clientAccessToken,
-      );
-
-      sessionUrl = sessionData["url"];
-
-      if (sessionUrl != null) {
-        _controller.loadRequest(Uri.parse(sessionUrl!));
-      }
-
-      setState(() {
-        _isCreatingSession = false;
-      });
-    } catch (error) {
-      debugPrint("Error creating session: $error");
-      setState(() {
-        _isCreatingSession = false;
-        _isLoading = false;
-      });
-    }
   }
 
   /// Obtains the client access token by authenticating with the Didit API.
@@ -205,9 +195,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body:
-          _isCreatingSession
-              ? const Center(child: CircularProgressIndicator())
-              : _isLoading
+          _isLoading
               ? const Center(child: CircularProgressIndicator())
               : WebViewWidget(controller: _controller),
     );
